@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "exastro-ita-api-v1"
+version = "0.1.0"
+description = ""
+authors = ["mtakahashiif"]
+readme = "README.md"
+packages = [
+    { include = "exastro_ita_api_v1" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.4.2"
+python-dotenv = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
