@@ -1,0 +1,82 @@
+import exastro_ita_api_v1 as apiv1
+import dotenv
+import json
+import collections.abc
+
+
+def test_xxx():
+    dotenv.load_dotenv()
+    api_context = apiv1.ApiContext()
+    api_request = api_context.create_api_request(apiv1.MenuId.Ansible_Legacy.作業対象ホスト)
+    options = api_request.options_table
+
+#    print(json.dumps(options, ensure_ascii=False, indent=4))
+
+    api_response = api_request.send_post(apiv1.XCommand.FILTER)
+    print(json.dumps(api_response.body_as_json_object, ensure_ascii=False, indent=4))
+
+
+
+def test_get_indexer():
+    dotenv.load_dotenv()
+    api_exastro = apiv1.ApiExastro()
+
+    indexer: dict[str, int] = api_exastro.get_indexer(apiv1.MenuId.基本コンソール.機器一覧)
+
+    print(indexer)
+
+
+def test_add_record():
+    dotenv.load_dotenv()
+    api_exastro = apiv1.ApiExastro()
+
+    records = [
+        {
+            'ホスト名': 'test1',
+            'IPアドレス': '192.168.0.1',
+            'Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ': 'machine'
+        },
+        {
+            'ホスト名': 'test2',
+            'IPアドレス': '192.168.0.2',
+            'Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ': 'machine'
+        }
+    ]
+
+    api_exastro.add_records(apiv1.MenuId.基本コンソール.機器一覧, records)
+
+
+def test_update_record():
+    dotenv.load_dotenv()
+    api_exastro = apiv1.ApiExastro()
+
+    records = [
+        {
+            'ホスト名': 'aaa',
+            'IPアドレス': '192.168.1.1',
+            'Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ': 'machine'
+        },
+        {
+            'ホスト名': 'bbb',
+            'IPアドレス': '192.168.1.2',
+            'Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ': 'machine'
+        }
+    ]
+
+    api_exastro.add_records(apiv1.MenuId.基本コンソール.機器一覧, records)
+
+    updators = [
+        {
+            'selector': {'ホスト名': 'aaa'},
+            'multiple-selection': False,
+            'replacer': {'ホスト名': 'xxx', 'IPアドレス': '192.168.2.1'},
+            'file-loader': {'ssh鍵認証情報/ssh秘密鍵ファイル': ''}
+        },
+        {
+            'selector': {'ホスト名': 'bbb'},
+            'multiple-selection': False,
+            'replacer': {'ホスト名': 'yyy', 'IPアドレス': '192.168.2.2'}
+        },
+    ]
+
+    api_exastro.update_records(apiv1.MenuId.基本コンソール.機器一覧, updators)
