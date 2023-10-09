@@ -15,68 +15,95 @@ def test_api():
     print(json.dumps(json_object, ensure_ascii=False, indent=4))
 
 
-#KIKI = {
-#    'BEFORE': {
-#        'HOST': 'ccc',
-#        'IP': '192.168.1.1',
-#    },
-#    'AFTER': {
-#        'HOST': 'ddd',
-#        'IP': '192.168.1.2',
-#    }
-#}
-#
-#def test_edit():
-#    dotenv.load_dotenv()
-#
-#    api_context = apiv1.ApiContext()
-#    api_request = api_context.create_api_request(apiv1.MenuId.基本コンソール.機器一覧)
-#    indexer = api_request.indexer
-#
-#    edit_parameter_builder = api_request.create_edit_parameter_builder()
-#
-#    edit_record = edit_parameter_builder.create_edit_record(apiv1.実行処理種別.登録)
-#    edit_record['ホスト名'] = KIKI['BEFORE']['HOST']
-#    edit_record['IPアドレス'] = KIKI['BEFORE']['IP']
-#    edit_record['Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ'] = 'machine'
-#    edit_parameter_builder.add(edit_record)
-#
-##    print(json.dumps(edit_parameter_builder.generate(), ensure_ascii=False, indent=4))
-#
-#    with api_request.send_post(apiv1.XCommand.EDIT, edit_parameter_builder.generate()) as api_response:
-#        print('40 edit 登録 ●●●●●●●●●●●●')
-#        print(json.dumps(api_response.body_as_json_object, ensure_ascii=False, indent=4))
-#
-#    filter_parameter = {
-#        indexer['廃止']: { 
-#            'NORMAL': '0'   # 廃止含まず
-#        },
-#        indexer['ホスト名']: {
-#            'NORMAL': KIKI['BEFORE']['HOST']
-#        }
-#    }
-#
-#    with api_request.send_post(apiv1.XCommand.FILTER_DATAONLY, filter_parameter) as api_response:
-#        json_object = api_response.body_as_json_object
-#        print('50 dataonly ●●●●●●●●●●●●')
-#        print(json.dumps(json_object, ensure_ascii=False, indent=4))
-#
-#    edit_parameter_builder = api_request.create_edit_parameter_builder()
-#
-#    edit_record = edit_parameter_builder.create_edit_record(apiv1.実行処理種別.更新, json_object['resultdata']['CONTENTS']['BODY'][0])
-#    edit_record['ホスト名'] = KIKI['AFTER']['HOST']
-#    edit_parameter_builder.add(edit_record)
-#
-#    with api_request.send_post(apiv1.XCommand.EDIT, edit_parameter_builder.generate()) as api_response:
-#        print('60 EDIT 更新 ●●●●●●●●●●●●')
-#        print(json.dumps(api_response.body_as_json_object, ensure_ascii=False, indent=4))
-#
-#    filter_parameter = {
-#        indexer['廃止']: { 
-#            'NORMAL': '0'   # 廃止含まず
-#        }
-#    }
-#
-#    with api_request.send_post(apiv1.XCommand.FILTER, filter_parameter) as api_response:
-#        print(json.dumps(api_response.body_as_json_object, ensure_ascii=False, indent=4))
-#
+def test_edit():
+    dotenv.load_dotenv()
+
+    api_context = apiv1.ApiContext()
+    api_request = api_context.create_api_request(apiv1.MenuId.基本コンソール.機器一覧)
+    indexer: apiv1.Indexer = api_request.indexer
+
+    parameters = {
+        "0": {
+            indexer['実行処理種別']: apiv1.実行処理種別.登録,
+            indexer['ホスト名']: 'test-hostname-01',
+            indexer['IPアドレス']: '192.168.0.1',
+            indexer['Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ']: 'machine'
+        },
+        "1": {
+            indexer['実行処理種別']: apiv1.実行処理種別.登録,
+            indexer['ホスト名']: 'test-hostname-02',
+            indexer['IPアドレス']: '192.168.0.2',
+            indexer['Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ']: 'machine'
+        }
+    }
+
+    with api_request.send_post(apiv1.XCommand.EDIT, parameters) as api_response:
+        json_object = api_response.body_as_json_object
+        print('EDIT ●●●●●●●●●●●●')
+        print(json.dumps(json_object, ensure_ascii=False, indent=4))    
+
+    parameters = {
+        indexer['廃止']: { 
+            'NORMAL': '0'   # 廃止含まず
+        }
+    }
+
+    with api_request.send_post(apiv1.XCommand.FILTER, parameters) as api_response:
+        json_object = api_response.body_as_json_object
+        print('FILTER ●●●●●●●●●●●●')
+        print(json.dumps(json_object, ensure_ascii=False, indent=4))    
+
+    with api_request.send_post(apiv1.XCommand.FILTER_DATAONLY, parameters) as api_response:
+        json_object = api_response.body_as_json_object
+        print('FILTER_DATAONLY ●●●●●●●●●●●●')
+        print(json.dumps(json_object, ensure_ascii=False, indent=4))    
+
+
+def test_edit_with_table():
+    dotenv.load_dotenv()
+
+    api_context = apiv1.ApiContext()
+    api_request = api_context.create_api_request(apiv1.MenuId.基本コンソール.機器一覧)
+    indexer: apiv1.Indexer = api_request.indexer
+
+    table = apiv1.Table(indexer)
+
+    row = table.create_row(operation=apiv1.実行処理種別.登録)
+    row.body['ホスト名'] = 'test-hostname-10'
+    row.body['IPアドレス'] = '192.168.0.10'
+    row.body['Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ'] = 'machine'
+    row.body['ssh鍵認証情報/ssh秘密鍵ファイル'] = 'private.key'
+    row.upload_file['ssh鍵認証情報/ssh秘密鍵ファイル'] = 'tests/data_private_keys/private-10.key'
+    table.add_row(row)
+
+    row = table.create_row(operation=apiv1.実行処理種別.登録)
+    row.body['ホスト名'] = 'test-hostname-11'
+    row.body['IPアドレス'] = '192.168.0.11'
+    row.body['Ansible利用情報/Ansible Automation Controller利用情報/接続タイプ'] = 'machine'
+    row.body['ssh鍵認証情報/ssh秘密鍵ファイル'] = 'private.key'
+    row.upload_file['ssh鍵認証情報/ssh秘密鍵ファイル'] = 'tests/data_private_keys/private-11.key'
+    table.add_row(row)
+    
+    print('parameters ●●●●●●●●●●●●')
+    print(json.dumps(table.generate_edit_parameters(), ensure_ascii=False, indent=4))    
+
+    with api_request.send_post(apiv1.XCommand.EDIT, table.generate_edit_parameters()) as api_response:
+        json_object = api_response.body_as_json_object
+        print('EDIT ●●●●●●●●●●●●')
+        print(json.dumps(json_object, ensure_ascii=False, indent=4))    
+
+    parameters = {
+        indexer['廃止']: { 
+            'NORMAL': '0'   # 廃止含まず
+        }
+    }
+
+    with api_request.send_post(apiv1.XCommand.FILTER_DATAONLY, parameters) as api_response:
+        json_object = api_response.body_as_json_object
+        print('FILTER_DATAONLY ●●●●●●●●●●●●')
+        print(json.dumps(json_object, ensure_ascii=False, indent=4))    
+
+    table = apiv1.Table(indexer, json_object)
+
+    print('parameters ●●●●●●●●●●●●')
+    print(json.dumps(table.generate_edit_parameters(), ensure_ascii=False, indent=4))    

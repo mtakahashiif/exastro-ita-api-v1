@@ -1,3 +1,4 @@
+import abc
 import base64
 import collections.abc
 import http.client
@@ -7,15 +8,69 @@ import urllib.parse
 import urllib.request
 import urllib.response
 
-from .common import *
-from .xcommand_edit import *
-
+from collections.abc import Iterator, Mapping
 from typing import *
 
+from .common import *
 
-class ApiResponse:
-    def __init__(self, menu_id: str, http_method: str, xcommand: str, response: http.client.HTTPResponse):
-        self.__menu_id: str = menu_id
+
+class Indexer(Mapping[str, int]):
+    def __init__(self, menu_id: str, column_names: list[str]) -> None:
+        self.__menu_id = menu_id
+        self.__mapping = {column_name: index for index, column_name in enumerate(column_names)}
+
+
+    @property
+    def menu_id(self) -> str:
+        return self.__menu_id
+
+
+    def __getitem__(self, key: str) -> int:
+        try:
+            return self.__mapping.__getitem__(key)
+        except KeyError as e:
+            raise KeyError(f'Invalid key "{key}" for the menu "{self.menu_id}". Valid keys are {list(self.__mapping.keys())}') from e
+
+
+    def __iter__(self) -> Iterator[int]:
+        return self.__mapping.__iter__()
+
+
+    def __len__(self) -> int:
+        return self.__mapping.__len__()
+
+
+    def sanitize(self, index: Union[int, str], is_named: bool = False) -> int:
+        if is_named:
+            index = self[index]
+
+        index = int(index)
+        if index < 0 or len(self) <= index:
+            raise ApiException(f'Invalid index "{index}" for the menu "{self.menu_id}". Valid index range is 0 <= index < {len(self)}')
+        
+        return index
+
+
+class IndexerMixin(metaclass = abc.ABCMeta):
+    @property
+    @abc.abstractmethod
+    def indexer(self) -> Indexer:
+        raise NotImplementedError()
+
+
+    @property
+    def menu_id(self) -> str:
+        return self.indexer.menu_id
+    
+
+    def check_acceptable(self, other: 'IndexerMixin') -> None:
+        if other.menu_id != self.menu_id:
+            raise ApiException(f'menu id "{other.menu_id}", but expected menu id is "{self.menu_id}".')
+
+
+class ApiResponse(IndexerMixin):
+    def __init__(self, api_request: 'ApiRequest', http_method: str, xcommand: str, response: http.client.HTTPResponse):
+        self.__api_request: ApiRequest = api_request
         self.__http_method: str = http_method
         self.__xcommand: str = xcommand
         self.__response: http.client.HTTPResponse = response
@@ -33,8 +88,18 @@ class ApiResponse:
 
 
     @property
+    def api_request(self) -> 'ApiRequest':
+        return self.__api_request
+    
+
+    @property
+    def indexer(self) -> Indexer:
+        return self.api_request.indexer
+
+
+    @property
     def menu_id(self) -> str:
-        return self.__menu_id
+        return self.api_request.menu_id
 
 
     @property
@@ -68,12 +133,12 @@ class ApiResponse:
         return self.__body_as_json_object
 
 
-class ApiRequest:
+class ApiRequest(IndexerMixin):
     def __init__(self, url: str, username: str, password: str, menu_id) -> None:
         self.__url: str = url
         self.__credential: str = base64.b64encode((username + ':' + password).encode()).decode()
         self.__menu_id: str = menu_id
-        self.__indexer: dict[str, int] = None
+        self.__indexer: Indexer = None
         self.__options_table: dict[str, dict[str, str]] = None
 
 
@@ -92,13 +157,13 @@ class ApiRequest:
         return self.__menu_id
 
     @property
-    def indexer(self) -> dict[str, int]:
+    def indexer(self) -> Indexer:
         if self.__indexer is None:
             with self.send_post(XCommand.INFO) as api_response:
-                column_names = api_response.body_as_json_object['resultdata']['CONTENTS']['INFO']
-                self.__indexer = {
-                    column_name: index for index, column_name in enumerate(column_names)
-                }
+                self.__indexer = Indexer(
+                    menu_id=self.menu_id,
+                    column_names=api_response.body_as_json_object['resultdata']['CONTENTS']['INFO']
+                )
 
         return self.__indexer
 
@@ -161,15 +226,11 @@ class ApiRequest:
         )
 
         return ApiResponse(
-            menu_id = self.menu_id,
+            api_request = self,
             http_method = http_method,
             xcommand = xcommand,
             response = urllib.request.urlopen(request)
         )
-
-
-    def create_edit_parameter_builder(self) -> EditParameterBuilder:
-        return EditParameterBuilder(self.indexer)
 
 
 class ApiContext:

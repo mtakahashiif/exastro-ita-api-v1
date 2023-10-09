@@ -1,5 +1,5 @@
 .PHONY: up-ita
-up-ita:
+up-ita: down-ita
 	docker run \
 		--detach \
 		--privileged \
@@ -7,6 +7,10 @@ up-ita:
 		--add-host exastro-it-automation:127.0.0.1 \
 		--name test-ita \
 		exastro/it-automation:1.11.0-ja
+
+	sleep 2
+
+	./change-ita-v1-initial-password-csrf.sh
 
 
 .PHONY: start-ita
