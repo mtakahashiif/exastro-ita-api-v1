@@ -40,7 +40,8 @@ class Record(collections.abc.MutableMapping[str, str], IndexerMixin):
 
 
     def __iter__(self) -> Iterator[str]:
-        raise NotImplementedError()
+        for index in self.__values.keys():
+            yield self.indexer.to_column_name(index)
 
 
     def __len__(self) -> int:
@@ -87,9 +88,12 @@ class Body(Record):
 
 
     def clone_for_edit(self, operation: str):
-        result = Body(Indexer, operation)
-        result._values[CommonIndex.ID]                       = self._values[CommonIndex.ID]
-        result._values[self.indexer['更新用の最終更新日時']] = self._values[self.indexer['更新用の最終更新日時']]
+        values: dict[int, str] = {
+            CommonIndex.ID: self.values[CommonIndex.ID],
+            self.indexer['更新用の最終更新日時']: self.values[self.indexer['更新用の最終更新日時']]
+        }
+
+        result = Body(self.indexer, values, operation)
 
         return result
 
@@ -109,12 +113,12 @@ class UploadFile(Record):
     
 
     def clone_for_edit(self, operation: str):
-        return UploadFile(Indexer)
+        return UploadFile(self.indexer)
 
 
 class Row(IndexerMixin):
     def __init__(self, indexer: Indexer, body_values: RecordValues = None, upload_file_values: RecordValues = None, operation: str = None, is_named: bool = False) -> None:
-        self.__indexer = indexer
+        self.__indexer: Indexer = indexer
 
         self.__body = Body(
             indexer = indexer,
@@ -158,10 +162,10 @@ class Row(IndexerMixin):
 
 
     def clone_for_edit(self, operation: str):
-        result = Row(Indexer)
+        result = Row(self.indexer)
 
-        result.body = self.body.clone_for_edit(operation)
-        result.upload_file = self.upload_file.clone_for_edit(operation)
+        result.__body = self.body.clone_for_edit(operation)
+        result.__upload_file = self.upload_file.clone_for_edit(operation)
 
         return result
 
@@ -188,7 +192,12 @@ class Table(IndexerMixin):
     @property
     def indexer(self) -> Indexer:
         return self.__indexer
-    
+
+
+    @property
+    def rows(self) -> Collection[Row]:
+        return self.__rows.values()
+
 
     def create_row(self, body_values: RecordValues = None, upload_file_values: RecordValues = None, operation: str = None, is_named: bool =False) -> Row:
         return Row(self.indexer, body_values, upload_file_values, operation, is_named)

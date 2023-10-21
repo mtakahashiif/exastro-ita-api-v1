@@ -18,6 +18,7 @@ class Indexer(Mapping[str, int]):
     def __init__(self, menu_id: str, column_names: list[str]) -> None:
         self.__menu_id = menu_id
         self.__mapping = {column_name: index for index, column_name in enumerate(column_names)}
+        self.__reverse_mapping = {index: column_name for column_name, index in self.__mapping.items()}
 
 
     @property
@@ -32,12 +33,19 @@ class Indexer(Mapping[str, int]):
             raise KeyError(f'Invalid key "{key}" for the menu "{self.menu_id}". Valid keys are {list(self.__mapping.keys())}') from e
 
 
-    def __iter__(self) -> Iterator[int]:
+    def __iter__(self) -> Iterator[str]:
         return self.__mapping.__iter__()
 
 
     def __len__(self) -> int:
         return self.__mapping.__len__()
+
+
+    def to_column_name(self, index: int):
+        try:
+            return self.__reverse_mapping[index]
+        except KeyError as e:
+            raise KeyError(f'Invalid index "{index}" for the menu "{self.menu_id}". Valid index are 0 to {len(self.__reverse_mapping)}') from e
 
 
     def sanitize(self, index: Union[int, str], is_named: bool = False) -> int:
