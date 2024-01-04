@@ -10,10 +10,13 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
+lxml = {version = "^5.0.0", optional = true}
 
+[tool.poetry.extras]
+webrequest = ["lxml"]
 
-[tool.poetry.group.test.dependencies]
-pytest = "^7.4.2"
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.4"
 python-dotenv = "^1.0.0"
 
 [build-system]

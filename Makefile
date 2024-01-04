@@ -1,3 +1,18 @@
+.PHONY: install-libs
+install-libs:
+	poetry install --with dev -E webrequest
+
+
+.PHONY: test
+test:
+	poetry run pytest tests -s
+
+
+.PHONY: clean
+clean:
+	-rm -rf output
+
+
 .PHONY: up-ita
 up-ita: down-ita
 	docker run \

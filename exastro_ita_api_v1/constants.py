@@ -232,10 +232,13 @@ class 実行処理種別:
 
 
 class CommonIndex:
-    実行処理種別 = 0
-    廃止 = 1
-    ID = 2
+    実行処理種別 = '0'
+    廃止 = '1'
+    ID = '2'
 
 
-class ApiException(Exception):
-    pass
+class FILTER廃止状態:
+    すべて               = {}
+    廃止含まず           = {'NORMAL': '0'}
+    廃止のみ             = {'NORMAL': '1'}
+    オーバーライドしない = None
