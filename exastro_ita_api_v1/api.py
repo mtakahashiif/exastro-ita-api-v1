@@ -10,8 +10,8 @@ import urllib.request
 import urllib.response
 import time
 
-from collections.abc import Iterator, Mapping
-from typing import *
+from collections.abc import Iterator, Mapping, MutableMapping
+from typing import TypeVar, TypeAlias, Callable, Any, Protocol
 
 from .constants import *
 
@@ -100,10 +100,10 @@ class EventHook:
         self,
         api_request: 'ApiRequest',
         http_method: str,
-        xcommand: str,
+        xcommand: str | None,
         headers: dict[str, str],
-        params: dict[str, str],
-        wait_func: Callable,
+        params: dict[str, str] | None,
+        wait_func: Callable | None,
         wait_func_args: dict
     ) -> None: ...
 
@@ -137,16 +137,16 @@ class ApiResponse(IndexerMixin):
         self,
         api_request: 'ApiRequest',
         http_method: str,
-        xcommand: str,
-        params: dict,
-        response: http.client.HTTPResponse,
-        exception: Exception
+        xcommand: str | None,
+        params: dict | None,
+        response: http.client.HTTPResponse | urllib.error.HTTPError | None,
+        exception: Exception | None
     ) -> None:
         self.__api_request = api_request
         self.__http_method = http_method
         self.__xcommand = xcommand
         self.__params = params
-        self.__response: http.client.HTTPResponse = response
+        self.__response: http.client.HTTPResponse | urllib.error.HTTPError | None = response
         self.__exception = exception
         self.__body = None
         self.__json_object = None
@@ -157,10 +157,11 @@ class ApiResponse(IndexerMixin):
 
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if not self.__response.isclosed():
+        if isinstance(self.__response, http.client.HTTPResponse) and not self.__response.isclosed():
             self.__response.close()
-            self.__body = None
-            self.__json_object = None
+
+        self.__body = None
+        self.__json_object = None
 
 
     @property
@@ -189,29 +190,35 @@ class ApiResponse(IndexerMixin):
 
 
     @property
-    def xcommand(self) -> str:
+    def xcommand(self) -> str | None:
         return self.__xcommand
 
 
     @property
     def params(self) -> dict:
-        return self.__params
+        return self.__params if self.__params else {}
     
     
     @property
-    def exception(self) -> Exception:
+    def exception(self) -> Exception | None:
         return self.__exception
 
 
     @property
     def status(self) -> int:
-        return self.__response.status
+        if self.__response is not None and self.__response.status is not None:
+            return self.__response.status
+        else:
+            return -1
 
 
     @property
     def body(self) -> bytes:
         if self.__body is None:
-            self.__body = self.__response.read()
+            if self.__response is not None:
+                self.__body = self.__response.read()
+            else:
+                self.__body = bytes()
 
         return self.__body
 
@@ -233,14 +240,14 @@ class ApiRequest(IndexerMixin):
         api_context: 'ApiContext',
         url: str,
         menu_id,
-        default_wait_func: Callable = None
+        default_wait_func: Callable | None = None
     ) -> None:
         self.__api_context: ApiContext = api_context
         self.__url: str = url
         self.__credential: str = base64.b64encode((api_context.username + ':' + api_context.password).encode()).decode()
         self.__menu_id: str = menu_id
-        self.__indexer: Indexer = None
-        self.__options_table: dict[str, dict[str, str]] = None
+        self.__indexer: Indexer | None = None
+        self.__options_table: dict[str, dict[str, str]] | None = None
         self.__default_wait_func = default_wait_func if default_wait_func else lambda _, seconds=3: time.sleep(seconds)
 
 
@@ -279,11 +286,11 @@ class ApiRequest(IndexerMixin):
     def options_table(self) -> dict:
         if self.__options_table is None:
             with self.send_post(xcommand=XCommand.LIST_OPTIONS) as api_response:
-                body = api_response.json_object['resultdata']['CONTENTS']['BODY']
+                body = to_dict(api_response.json_object['resultdata']['CONTENTS']['BODY'])
 
             options_table: dict[str, dict[str, str]] = {}
-            column_names = to_dict(body[0])
-            for column_index, options in to_dict(body[1]):
+            column_names = to_dict(body["0"])
+            for column_index, options in to_dict(body["1"]).items():
                 options = to_dict(options)
                 if options:
                     options_table[column_names[column_index]] = options
@@ -296,7 +303,7 @@ class ApiRequest(IndexerMixin):
     def send_get(
         self,
         *,
-        wait_func: Callable = None,
+        wait_func: Callable | None = None,
         wait_func_args: dict = {}
     ) -> ApiResponse:
         return self.__invoke(
@@ -314,9 +321,9 @@ class ApiRequest(IndexerMixin):
     def send_post(
         self,
         xcommand: str,
-        params: dict = None,
+        params: dict | None = None,
         *,
-        wait_func: Callable = None,
+        wait_func: Callable | None = None,
         wait_func_args: dict = {}
     ) -> ApiResponse:
         return self.__invoke(
@@ -336,11 +343,11 @@ class ApiRequest(IndexerMixin):
     def __invoke(
         self,
         http_method: str,
-        xcommand: str,
+        xcommand: str | None,
         headers: dict[str, str],
-        params: dict = None,
+        params: dict | None = None,
         *,
-        wait_func: Callable,
+        wait_func: Callable | None,
         wait_func_args: dict
     ) -> ApiResponse:
         
@@ -415,7 +422,7 @@ class WebResponse:
     ) -> None:
         # Response instance returned from urllib "opener" must not be held because it will be closed.
         self.__response_type = type(response)
-        self.__headers = list(response.getheaders())
+        self.__headers = list(response.getheaders()) if isinstance(response, http.client.HTTPResponse) else []
         self.__body = response.read().decode('utf-8')
         self.__code = response.getcode()
 
@@ -446,7 +453,7 @@ class WebRequest:
         api_context: 'ApiContext',
         menu_id: str,
         *,
-        default_wait_func: Callable = None
+        default_wait_func: Callable | None = None
     ) -> None:
         self.__api_context = api_context
         self.__menu_id = menu_id
@@ -464,11 +471,11 @@ class WebRequest:
     def __send(
         self,
         method: str,
-        path: str,
-        queries: dict[str, str],
-        parameters: dict[str, str] = None,
+        path: str | None,
+        queries: dict[str, str] | None,
+        parameters: dict[str, str] | None = None,
         *,
-        wait_func: Callable = None,
+        wait_func: Callable | None = None,
         wait_func_args: dict = {},
         override_queries: bool = False
     ) -> WebResponse:
@@ -519,8 +526,8 @@ class WebRequest:
 
     def send_get(
         self,
-        path: str = None,
-        queries: dict[str, str] = None,
+        path: str | None = None,
+        queries: dict[str, str] | None = None,
         *,
         override_queries: bool = False
     ) -> WebResponse:
@@ -534,9 +541,9 @@ class WebRequest:
 
     def send_post(
         self,
-        path: str = None,
-        queries: dict[str, str] = None,
-        parameters: dict[str, str] = None,
+        path: str | None = None,
+        queries: dict[str, str] | None = None,
+        parameters: dict[str, str] | None = None,
         *,
         override_queries: bool = False
     ) -> WebResponse:
@@ -552,16 +559,16 @@ class WebRequest:
 class ApiContext:
     def __init__(
         self,
-        config: dict = {},
+        config: MutableMapping[str, str] = {},
         *,
-        default_wait_func: Callable = None,
+        default_wait_func: Callable | None = None,
         event_hook: EventHook = EventHook()
     ) -> None:
         self.__protocol: str = config.get('EXASTRO_PROTOCOL', 'http')
         self.__host: str = config.get('EXASTRO_HOST', 'localhost')
         self.__port: str = config.get('EXASTRO_PORT', '8080')
-        self.__username: str = config.get('EXASTRO_USERNAME')
-        self.__password: str = config.get('EXASTRO_PASSWORD')
+        self.__username: str = config['EXASTRO_USERNAME']
+        self.__password: str = config['EXASTRO_PASSWORD']
         self.__default_wait_func = default_wait_func
         self.__event_handler = event_hook
 
@@ -592,7 +599,7 @@ class ApiContext:
 
 
     @property
-    def default_wait_func(self) -> Callable:
+    def default_wait_func(self) -> Callable | None:
         return self.__default_wait_func
 
 
@@ -605,7 +612,7 @@ class ApiContext:
         self,
         menu_id: str,
         *,
-        default_wait_func: Callable = None
+        default_wait_func: Callable | None = None
     ) -> ApiRequest:
         return ApiRequest(
             self,

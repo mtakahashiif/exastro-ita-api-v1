@@ -2,14 +2,14 @@ import collections.abc
 import pathlib
 import uuid
 
-from typing import *
+from typing import Sequence
 
 from .api import *
 from .constants import *
 
 
 class Record(collections.abc.MutableMapping[str, str], IndexerMixin):
-    def __init__(self, indexer: Indexer, values: dict[str, str] = None) -> None:
+    def __init__(self, indexer: Indexer, values: dict[str, str]) -> None:
         self.__indexer = indexer
         self.__values = values
 
@@ -45,7 +45,14 @@ class Record(collections.abc.MutableMapping[str, str], IndexerMixin):
         return self.__values
 
 
-    def at(self, index: int | str) -> str:
+    def clone_values(self, kept_indexes: list[str] | None = None) -> dict[str, str]:
+        if kept_indexes is None:
+            return dict(self.__values)
+        else:
+            return {index: self.__values[index] for index in kept_indexes} if kept_indexes else {}
+
+
+    def at(self, index: int | str) -> str | None:
         i = int(index)
 
         # out of range
@@ -58,10 +65,10 @@ class Record(collections.abc.MutableMapping[str, str], IndexerMixin):
     def merge(self, other: 'Record') -> None:
         self.check_acceptable(other)
 
-        self.values |= other.values
+        self.__values |= other.values
 
 
-    def to_editable(self, kept_indexes: list[str] = None):
+    def to_editable(self, kept_indexes: list[str] = []):
         kept_values = {index: self.values[index] for index in kept_indexes} if kept_indexes else {}
         self.values.clear()
         self.values.update(kept_values)
@@ -81,19 +88,12 @@ class Record(collections.abc.MutableMapping[str, str], IndexerMixin):
         }
 
 
-    def clone_for_edit(self, kept_indexes: list[str] = None):
-        return Record(
-            indexer=self.indexer,
-            values={index: self.values[index] for index in kept_indexes}
-        )
-
-
 class Row(IndexerMixin):
     def __init__(self,
         indexer: Indexer,
         body_values: StrBlurDict = None,
         file_values: StrBlurDict = None,
-        operation: str = None
+        operation: str | None = None
     ) -> None:
         self.__indexer: Indexer = indexer
 
@@ -125,7 +125,7 @@ class Row(IndexerMixin):
 
     @property
     def id(self) -> str:
-        return self.body.values.get(CommonIndex.ID)
+        return self.body.values[CommonIndex.ID]
 
 
     def merge(self, row: 'Row'):
@@ -135,7 +135,7 @@ class Row(IndexerMixin):
         self.file.merge(row.file)
 
 
-    def to_editable(self, operation: str = None) -> None:
+    def to_editable(self, operation: str | None = None) -> None:
         self.body.to_editable([
             CommonIndex.ID,
             self.indexer['更新用の最終更新日時']
@@ -150,18 +150,15 @@ class Row(IndexerMixin):
     def clone_for_edit(self, operation: str):
         return Row(
             self.indexer,
-            body_values=self.body.clone_for_edit([
-                CommonIndex.ID,
-                self.indexer['更新用の最終更新日時']
-            ]),
-            file_values=self.file.clone_for_edit(),
+            body_values=self.body.clone_values([CommonIndex.ID, self.indexer['更新用の最終更新日時']]),
+            file_values=self.file.clone_values(),
             operation=operation
         )
 
 
 # FILTERのみ受け入れ可能。FILTER_DATAONLYは受入不可
 class Menu(IndexerMixin):
-    def __init__(self, indexer: Indexer, json_object: dict = None) -> None:
+    def __init__(self, indexer: Indexer, json_object: dict | None = None) -> None:
         self.__indexer: Indexer = indexer
         self.__rows: dict[str, Row] = {}
 
@@ -196,7 +193,7 @@ class Menu(IndexerMixin):
         self,
         body_values: StrBlurDict = None,
         file_values: StrBlurDict = None,
-        operation: str = None
+        operation: str | None = None
     ) -> Row:
         return Row(
             indexer=self.indexer,
@@ -206,21 +203,20 @@ class Menu(IndexerMixin):
         )
 
 
-    def add_row(self, row: Row) -> Row:
+    def add_row(self, row: Row) -> None:
         self.check_acceptable(row)
         
-        if row.id:
-            if row.id in self.__rows.keys():
-                raise ApiException(f'Row ID "{row.id}" already exists in table.')
-            
+        try:
             id = row.id
-        else:
+            if id in self.__rows.keys():
+                raise ApiException(f'Row ID "{id}" already exists in table.')
+        except KeyError:
             id = str(uuid.uuid4())
-        
+
         self.__rows[id] = row
 
 
-    def merge_row(self, row: Row) -> Row:
+    def merge_row(self, row: Row) -> None:
         base_row = self.__rows.get(row.id)
         if base_row:
             base_row.merge(row)
